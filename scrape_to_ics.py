@@ -2,7 +2,7 @@ import json, os, re, hashlib
 from datetime import datetime, timedelta
 from dateutil import tz
 from ics import Calendar, Event, DisplayAlarm
-from playwright.sync_api import sync_playwright
+import requests
 
 # === CONFIG ===
 URL = os.environ.get("FIXTURES_URL", "https://www.laczynaspilka.pl/rozgrywki?season=e9d66181-d03e-4bb3-b889-4da848f4831d&leagueGroup=43da7ba1-b751-4295-814b-24bd37fd2d45&leagueId=5cc45e5f-744b-428c-b8af-cdefca38de29&enumType=Play&group=e5bc0d4f-1bc4-40f5-92f9-e55c859b5166&isAdvanceMode=false&genderType=Male")
@@ -18,9 +18,8 @@ TZ = tz.gettz(TIMEZONE)
 def normalize_space(s: str) -> str:
     return re.sub(r"\s+", " ", s or "").strip()
 
-def parse_fixture_rows(page):
-    page.wait_for_load_state("networkidle")
-    html = page.content()
+def parse_fixture_rows(html):
+    print("Parsing HTML content...")
     # Wzorzec: "Gospodarz – Gość ... dd.mm.rrrr, HH:MM" (godzina może nie wystąpić)
     pattern = re.compile(
         r"(?P<home>[^<>\n–-]{3,}?)\s*[–-]\s*(?P<away>[^<>\n]{3,}?)"
@@ -30,14 +29,23 @@ def parse_fixture_rows(page):
         re.S
     )
     fixtures = []
+    matches_found = 0
     for m in pattern.finditer(html):
+        matches_found += 1
         home = normalize_space(m.group("home"))
         away = normalize_space(m.group("away"))
         date_s = m.group("date")
         time_s = m.group("time")
+        
+        if matches_found <= 5:  # Debug: pokaż pierwsze 5 meczów
+            print(f"Found match: {home} - {away} on {date_s} at {time_s}")
+            
         if TEAM.lower() not in (home.lower() + " " + away.lower()):
             continue
         fixtures.append({"home": home, "away": away, "date": date_s, "time": time_s})
+        
+    print(f"Total matches found: {matches_found}, Team matches: {len(fixtures)}")
+    
     uniq, seen = [], set()
     for f in fixtures:
         key = (f["home"], f["away"], f["date"], f["time"] or "")
@@ -103,23 +111,29 @@ def main():
         print(f"Starting scraper for: {TEAM}")
         print(f"URL: {URL}")
         
-        with sync_playwright() as p:
-            print("Launching browser...")
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            
-            # Krótszy timeout i lepsze error handling
-            print("Loading page...")
-            page.goto(URL, timeout=30_000)  # 30s zamiast 120s
-            
-            print("Parsing fixtures...")
-            fixtures = parse_fixture_rows(page)
-            browser.close()
+        # Użyj requests zamiast Playwright
+        print("Making HTTP request...")
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        response = requests.get(URL, headers=headers, timeout=30)
+        response.raise_for_status()
+        html = response.text
+        
+        print(f"Got response, content length: {len(html)}")
+        
+        print("Parsing fixtures...")
+        fixtures = parse_fixture_rows(html)
             
         print(f"Found {len(fixtures)} fixtures for {TEAM}")
         
         if not fixtures:
             print("WARNING: No fixtures parsed. Check selectors or page layout.")
+            # Zapisz fragment HTML do debugowania
+            with open("debug.html", "w", encoding="utf-8") as f:
+                f.write(html[:5000])  # Pierwsze 5000 znaków
+            print("Saved first 5000 chars to debug.html")
             return
 
         h = compute_hash(fixtures)
