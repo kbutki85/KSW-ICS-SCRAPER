@@ -111,31 +111,26 @@ def main():
         print(f"Starting scraper for: {TEAM}")
         print(f"URL: {URL}")
         
-        # Użyj requests zamiast Playwright
-        print("Making HTTP request...")
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
+        # For now, create some dummy fixtures to test the workflow
+        # TODO: Replace with actual scraping once we solve the SPA issue
+        print("Creating dummy fixtures for testing...")
+        fixtures = [
+            {
+                "home": "KS Wasilków",
+                "away": "Test Team 1", 
+                "date": "15.12.2024",
+                "time": "15:00"
+            },
+            {
+                "home": "Test Team 2",
+                "away": "KS Wasilków",
+                "date": "22.12.2024", 
+                "time": "16:00"
+            }
+        ]
         
-        response = requests.get(URL, headers=headers, timeout=30)
-        response.raise_for_status()
-        html = response.text
+        print(f"Generated {len(fixtures)} test fixtures for {TEAM}")
         
-        print(f"Got response, content length: {len(html)}")
-        
-        print("Parsing fixtures...")
-        fixtures = parse_fixture_rows(html)
-            
-        print(f"Found {len(fixtures)} fixtures for {TEAM}")
-        
-        if not fixtures:
-            print("WARNING: No fixtures parsed. Check selectors or page layout.")
-            # Zapisz fragment HTML do debugowania
-            with open("debug.html", "w", encoding="utf-8") as f:
-                f.write(html[:5000])  # Pierwsze 5000 znaków
-            print("Saved first 5000 chars to debug.html")
-            return
-
         h = compute_hash(fixtures)
         old = open(STATE_FILE).read().strip() if os.path.exists(STATE_FILE) else ""
         
@@ -147,6 +142,7 @@ def main():
             with open(STATE_FILE, "w", encoding="utf-8") as s:
                 s.write(h)
             print("UPDATED")
+            print(f"Created {OUT} with {len(fixtures)} fixtures")
         else:
             print("NO_CHANGE")
             
