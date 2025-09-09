@@ -1,0 +1,49 @@
+name: Build ICS
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # pon 08:00 Europe/Warsaw ≈ 06:00 UTC
+    - cron: "0 6 * * 4" # czw 08:00 Europe/Warsaw ≈ 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Generate ICS
+        env:
+          TEAM_NAME: "KS Wasilków"
+          FIXTURES_URL: "https://www.laczynaspilka.pl/rozgrywki?season=e9d66181-d03e-4bb3-b889-4da848f4831d&leagueGroup=43da7ba1-b751-4295-814b-24bd37fd2d45&leagueId=5cc45e5f-744b-428c-b8af-cdefca38de29&enumType=Play&group=e5bc0d4f-1bc4-40f5-92f9-e55c859b5166&isAdvanceMode=false&genderType=Male"
+          OUTPUT_ICS: "betclic3g1_ksw.ics"
+          TIMEZONE: "Europe/Warsaw"
+          ALARM_TIME: "09:00"
+        run: python scrape_to_ics.py
+
+      - name: Commit & push if changed
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions"
+            git config user.email "actions@users.noreply.github.com"
+            git add -A
+            git commit -m "Update ICS"
+            git push
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ics
+          path: betclic3g1_ksw.ics
