@@ -99,27 +99,48 @@ def compute_hash(fixtures):
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 def main():
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        page.goto(URL, timeout=120_000)
-        fixtures = parse_fixture_rows(page)
-        browser.close()
+    try:
+        print(f"Starting scraper for: {TEAM}")
+        print(f"URL: {URL}")
+        
+        with sync_playwright() as p:
+            print("Launching browser...")
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            
+            # Krótszy timeout i lepsze error handling
+            print("Loading page...")
+            page.goto(URL, timeout=30_000)  # 30s zamiast 120s
+            
+            print("Parsing fixtures...")
+            fixtures = parse_fixture_rows(page)
+            browser.close()
+            
+        print(f"Found {len(fixtures)} fixtures for {TEAM}")
+        
+        if not fixtures:
+            print("WARNING: No fixtures parsed. Check selectors or page layout.")
+            return
 
-    if not fixtures:
-        print("WARNING: No fixtures parsed. Check selectors or page layout.")
-
-    h = compute_hash(fixtures)
-    old = open(STATE_FILE).read().strip() if os.path.exists(STATE_FILE) else ""
-    if h != old:
-        cal = build_ics(fixtures)
-        with open(OUT, "w", encoding="utf-8") as f:
-            f.writelines(cal.serialize_iter())
-        with open(STATE_FILE, "w", encoding="utf-8") as s:
-            s.write(h)
-        print("UPDATED")
-    else:
-        print("NO_CHANGE")
+        h = compute_hash(fixtures)
+        old = open(STATE_FILE).read().strip() if os.path.exists(STATE_FILE) else ""
+        
+        if h != old:
+            print("Changes detected, generating ICS...")
+            cal = build_ics(fixtures)
+            with open(OUT, "w", encoding="utf-8") as f:
+                f.writelines(cal.serialize_iter())
+            with open(STATE_FILE, "w", encoding="utf-8") as s:
+                s.write(h)
+            print("UPDATED")
+        else:
+            print("NO_CHANGE")
+            
+    except Exception as e:
+        print(f"ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        exit(1)
 
 if __name__ == "__main__":
     main()
